@@ -69,7 +69,9 @@ variable "internal_securitygroup_ids" {
 variable "f5_instance_type" {
   description = "Specifies the size of the virtual machine."
   type        = string
-  default     = "Standard_D8s_v4"
+##  default     = "Standard_D8s_v4"
+  default     = "Standard_D4_v2"
+#  default     = "Standard_DS5_v2"
 }
 
 variable "image_publisher" {
@@ -80,7 +82,7 @@ variable "image_publisher" {
 
 variable "f5_image_name" {
   type        = string
-  default     = "f5-big-best-plus-hourly-25mbps"
+  default     = "f5-big-all-2slot-byol"
   description = <<-EOD
 After finding the image to use with the Azure CLI with a variant of the following;
 
@@ -119,7 +121,7 @@ EOD
 
 variable "f5_product_name" {
   type        = string
-  default     = "f5-big-ip-best"
+  default     = "f5-big-ip-byol"
   description = <<-EOD
 After finding the image to use with the Azure CLI with a variant of the following;
 

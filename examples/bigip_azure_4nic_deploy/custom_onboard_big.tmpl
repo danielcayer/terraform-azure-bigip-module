@@ -5,9 +5,6 @@
 
 
 mkdir -p  /var/log/cloud /config/cloud /var/config/rest/downloads
-
-mkdir -p /config/cloud
-
 LOG_FILE=/var/log/cloud/startup-script.log
 [[ ! -f $LOG_FILE ]] && touch $LOG_FILE || { echo "Run Only Once. Exiting"; exit; }
 npipe=/tmp/$$.tmp
@@ -19,10 +16,10 @@ exec 1>$npipe
 exec 2>&1
 
 # Run Immediately Before MCPD
-/usr/bin/setdb provision.extramb 1000
-/usr/bin/setdb restjavad.useextramb true
+#/usr/bin/setdb provision.extramb 1000
+#/usr/bin/setdb restjavad.useextramb true
   
-curl -o /config/cloud/do_w_admin.json -s --fail --retry 60 -m 10 -L https://raw.githubusercontent.com/F5Networks/terraform-azure-bigip-module/main/config/onboard_do.json
+#curl -o /config/cloud/do_w_admin.json -s --fail --retry 60 -m 10 -L https://raw.githubusercontent.com/F5Networks/terraform-azure-bigip-module/main/config/onboard_do.json
 
 
 ### write_files:
@@ -30,6 +27,10 @@ curl -o /config/cloud/do_w_admin.json -s --fail --retry 60 -m 10 -L https://raw.
 
 cat << 'EOF' > /config/cloud/runtime-init-conf.yaml
 ---
+controls:
+  logLevel: silly
+  logFilename: /var/log/cloud/bigIpRuntimeInit.log
+pre_onboard_enabled: []
 runtime_parameters:
   - name: USER_NAME
     type: static
@@ -43,6 +44,14 @@ runtime_parameters:
   - name: SSH_KEYS
     type: static
     value: "${ssh_keypair}"
+  - name: MGMT_GW
+    type: metadata
+    metadataProvider:
+      environment: azure
+      type: network
+      field: ipv4
+      index: 0
+      ipcalc: first
 EOF
 
 if ${az_keyvault_authentication}
@@ -55,7 +64,6 @@ then
       type: KeyVault
       vaultUrl: ${vault_url}
       secretId: ${secret_id}
-pre_onboard_enabled: []
 EOF
 else
 
@@ -63,30 +71,19 @@ else
   - name: ADMIN_PASS
     type: static
     value: ${bigip_password}
-pre_onboard_enabled: []
 EOF
 fi
 
 cat /config/cloud/runtime-init-conf.yaml > /config/cloud/runtime-init-conf-backup.yaml
 
+#FAST templates RPM was causing runtime init to abort so I removed it from install_operations. 
 cat << 'EOF' >> /config/cloud/runtime-init-conf.yaml
+bigip_ready_enabled: []
 extension_packages:
   install_operations:
     - extensionType: do
       extensionVersion: ${DO_VER}
       extensionUrl: ${DO_URL}
-    - extensionType: as3
-      extensionVersion: ${AS3_VER}
-      extensionUrl: ${AS3_URL}
-    - extensionType: ts
-      extensionVersion: ${TS_VER}
-      extensionUrl: ${TS_URL}
-    - extensionType: cf
-      extensionVersion: ${CFE_VER}
-      extensionUrl: ${CFE_URL}
-    - extensionType: fast
-      extensionVersion: ${FAST_VER}
-      extensionUrl: ${FAST_URL}
 extension_services:
   service_operations:
     - extensionType: do
@@ -95,14 +92,39 @@ extension_services:
         schemaVersion: 1.0.0
         class: Device
         async: true
+        label: Example 8NIC BIG-IP with Runtime-Init
         Common:
           class: Tenant
-          hostname: '{{{HOST_NAME}}}.com'
+          My_DbVariables:
+            class: DbVariables
+            provision.extramb: 1000
+            restjavad.useextramb: true
+            ui.advisory.enabled: true
+            ui.advisory.color: blue
+            ui.advisory.text: BIG-IP VE Runtime Init Example
+            dhclient.mgmt: disable
+            config.allow.rfc3927: enable
+            tm.tcpudptxchecksum: Software-only
+          My_System:
+            class: System
+            hostname: '{{{HOST_NAME}}}.local'
+            cliInactivityTimeout: 12000
+            consoleInactivityTimeout: 12000
+            autoPhonehome: true
+          My_License:
+            class: License
+            licenseType: regKey
+            regKey: "HWHJQ-JPEAG-SGOQY-PMFZR-ZZWVTQA"
+          My_Provisioning:
+            class: Provision
+            sslo: nominal
+            ltm: nominal
+            avr: nominal
           myNtp:
             class: NTP
             servers:
               - 0.pool.ntp.org
-            timezone: UTC
+            timezone: America/New_York
           myDns:
             class: DNS
             nameServers:
@@ -127,63 +149,27 @@ extension_services:
             keys:
               - '{{{SSH_KEYS}}}'
             userType: regular
+          default:
+            class: ManagementRoute
+            gw: '{{{MGMT_GW}}}'
+            network: default
+          dhclient_route1:
+            class: ManagementRoute
+            gw: '{{{MGMT_GW}}}'
+            network: 168.63.129.16/32
+          azureMetadata:
+            class: ManagementRoute
+            gw: '{{{MGMT_GW}}}'
+            network: 169.254.169.254/32
 post_onboard_enabled: []
 EOF
 
-cat << 'EOF' >> /config/cloud/runtime-init-conf-backup.yaml
-extension_services:
-  service_operations:
-    - extensionType: do
-      type: inline
-      value:
-        schemaVersion: 1.0.0
-        class: Device
-        async: true
-        Common:
-          class: Tenant
-          hostname: '{{{HOST_NAME}}}.com'
-          myNtp:
-            class: NTP
-            servers:
-              - 0.pool.ntp.org
-            timezone: UTC
-          myDns:
-            class: DNS
-            nameServers:
-              - 168.63.129.16
-          admin:
-            class: User
-            partitionAccess:
-              all-partitions:
-                role: admin
-            password: '{{{ADMIN_PASS}}}'
-            shell: bash
-            keys:
-              - '{{{SSH_KEYS}}}'
-            userType: regular
-          '{{{USER_NAME}}}':
-            class: User
-            partitionAccess:
-              all-partitions:
-                role: admin
-            password: '{{{ADMIN_PASS}}}'
-            shell: bash
-            keys:
-              - '{{{SSH_KEYS}}}'
-            userType: regular
-post_onboard_enabled: []
-EOF
 
 # # Download
-#PACKAGE_URL='https://cdn.f5.com/product/cloudsolutions/f5-bigip-runtime-init/v1.1.0/dist/f5-bigip-runtime-init-1.1.0-1.gz.run'
-#PACKAGE_URL='https://cdn.f5.com/product/cloudsolutions/f5-bigip-runtime-init/v1.2.0/dist/f5-bigip-runtime-init-1.2.0-1.gz.run'
 for i in {1..30}; do
-    curl -fv --retry 1 --connect-timeout 5 -L ${INIT_URL} -o "/var/config/rest/downloads/f5-bigip-runtime-init.gz.run" && break || sleep 10
+    curl -fv --retry 1 --connect-timeout 5 -L "${INIT_URL}" -o "/var/config/rest/downloads/f5-bigip-runtime-init.gz.run" && break || sleep 10
 done
 # Install
 bash /var/config/rest/downloads/f5-bigip-runtime-init.gz.run -- '--cloud azure'
 # Run
 f5-bigip-runtime-init --config-file /config/cloud/runtime-init-conf.yaml
-sleep 5
-f5-bigip-runtime-init --config-file /config/cloud/do_w_admin.json
-#f5-bigip-runtime-init --config-file /config/cloud/runtime-init-conf-backup.yaml

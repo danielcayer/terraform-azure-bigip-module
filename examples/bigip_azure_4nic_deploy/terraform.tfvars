@@ -1,4 +1,4 @@
 # BIG-IP Environment
-location = "eastus"
+location = "canadacentral"
 
-AllowedIPs = ["0.0.0.0/0"]
+AllowedIPs = ["173.32.200.188/32"]

@@ -22,7 +22,30 @@ resource "azurerm_ssh_public_key" "f5_key" {
   name                = format("%s-pubkey-%s", var.prefix, random_id.id.hex)
   resource_group_name = azurerm_resource_group.rg.name
   location            = azurerm_resource_group.rg.location
-  public_key          = file("~/.ssh/id_rsa.pub")
+  public_key          = file("~/.ssh/id_rsa_azure.pub")
+}
+
+data "template_file" "user_data_vm0" {
+  template = file("custom_onboard_big.tmpl")
+  vars = {
+    INIT_URL                   = var.INIT_URL
+    DO_URL                     = var.DO_URL
+    AS3_URL                    = var.AS3_URL
+    TS_URL                     = var.TS_URL
+    CFE_URL                    = var.CFE_URL
+    FAST_URL                   = var.FAST_URL,
+    DO_VER                     = format("v%s", split("-", split("/", var.DO_URL)[length(split("/", var.DO_URL)) - 1])[3])
+    AS3_VER                    = format("v%s", split("-", split("/", var.AS3_URL)[length(split("/", var.AS3_URL)) - 1])[2])
+    TS_VER                     = format("v%s", split("-", split("/", var.TS_URL)[length(split("/", var.TS_URL)) - 1])[2])
+    CFE_VER                    = format("v%s", split("-", split("/", var.CFE_URL)[length(split("/", var.CFE_URL)) - 1])[3])
+    FAST_VER                   = format("v%s", split("-", split("/", var.FAST_URL)[length(split("/", var.FAST_URL)) - 1])[3])
+    az_keyvault_authentication = false
+    vault_url                  = ""
+    secret_id                  = ""
+    bigip_username             = "bigipuser"
+    ssh_keypair                = fileexists("~/.ssh/id_rsa_azure.pub") ? file("~/.ssh/id_rsa_azure.pub") : ""
+    bigip_password             = "testAzure@123"
+  }
 }
 
 #
@@ -30,18 +53,19 @@ resource "azurerm_ssh_public_key" "f5_key" {
 #
 module "bigip" {
   count                      = var.instance_count
-  source                     = "../../"
+  source                     = "../../" 
   prefix                     = format("%s-4nic", var.prefix)
   resource_group_name        = azurerm_resource_group.rg.name
   f5_ssh_publickey           = azurerm_ssh_public_key.f5_key.public_key
   mgmt_subnet_ids            = [{ "subnet_id" = data.azurerm_subnet.mgmt.id, "public_ip" = true, "private_ip_primary" = "" }]
   mgmt_securitygroup_ids     = [module.mgmt-network-security-group.network_security_group_id]
-  external_subnet_ids        = [{ "subnet_id" = data.azurerm_subnet.external-public.id, "public_ip" = true, "private_ip_primary" = "", "private_ip_secondary" = "" }, { "subnet_id" = data.azurerm_subnet.external-public2.id, "public_ip" = true, "private_ip_primary" = "", "private_ip_secondary" = "" }]
-  external_securitygroup_ids = [module.external-network-security-group-public.network_security_group_id, module.external-network-security-group-public.network_security_group_id]
-  //internal_subnet_ids        = [{ "subnet_id" = data.azurerm_subnet.internal.id, "public_ip" = false, "private_ip_primary" = "" }]
-  //internal_securitygroup_ids = [module.internal-network-security-group.network_security_group_id]
+  external_subnet_ids        = [{ "subnet_id" = data.azurerm_subnet.external-public.id, "public_ip" = true, "private_ip_primary" = "", "private_ip_secondary" = "" }]
+  external_securitygroup_ids = [module.external-network-security-group-public.network_security_group_id]
+  internal_subnet_ids        = [{ "subnet_id" = data.azurerm_subnet.internal.id, "public_ip" = false, "private_ip_primary" = "" }, { "subnet_id" = data.azurerm_subnet.ftd-in.id, "public_ip" = false, "private_ip_primary" = "" }, { "subnet_id" = data.azurerm_subnet.ftd-out.id, "public_ip" = false, "private_ip_primary" = "" }, { "subnet_id" = data.azurerm_subnet.wsa-in.id, "public_ip" = false, "private_ip_primary" = "" }, { "subnet_id" = data.azurerm_subnet.wsa-out.id, "public_ip" = false, "private_ip_primary" = "" }]
+  internal_securitygroup_ids = [module.internal-network-security-group.network_security_group_id, module.internal-network-security-group.network_security_group_id, module.internal-network-security-group.network_security_group_id, module.internal-network-security-group.network_security_group_id, module.internal-network-security-group.network_security_group_id]
   availability_zone           = var.availability_zone
   availabilityZones_public_ip = var.availabilityZones_public_ip
+  custom_user_data            = data.template_file.user_data_vm0.rendered
 }
 
 #
@@ -53,8 +77,8 @@ module "network" {
   vnet_name           = format("%s-vnet-%s", var.prefix, random_id.id.hex)
   resource_group_name = azurerm_resource_group.rg.name
   address_space       = [var.cidr]
-  subnet_prefixes     = [cidrsubnet(var.cidr, 8, 1), cidrsubnet(var.cidr, 8, 2), cidrsubnet(var.cidr, 8, 3), cidrsubnet(var.cidr, 8, 4)]
-  subnet_names        = ["mgmt-subnet", "external-public-subnet", "external-public-subnet2", "internal-subnet"]
+  subnet_prefixes     = [cidrsubnet(var.cidr, 8, 1), cidrsubnet(var.cidr, 8, 2), cidrsubnet(var.cidr, 8, 3), cidrsubnet(var.cidr, 8, 4), cidrsubnet(var.cidr, 8, 5), cidrsubnet(var.cidr, 8, 6), cidrsubnet(var.cidr, 8, 7), cidrsubnet(var.cidr, 8, 8), cidrsubnet(var.cidr, 8, 9), cidrsubnet(var.cidr, 8, 10)]
+  subnet_names        = ["mgmt-subnet", "external-public-subnet", "external-public-subnet2", "internal-subnet", "ftd-in-subnet", "ftd-out-subnet", "wsa-in-subnet", "wsa-out-subnet", "inspection-in-subnet", "inspection-out-subnet"]
 
   tags = {
     environment = "dev"
@@ -85,6 +109,48 @@ data "azurerm_subnet" "external-public2" {
 
 data "azurerm_subnet" "internal" {
   name                 = "internal-subnet"
+  virtual_network_name = module.network.vnet_name
+  resource_group_name  = azurerm_resource_group.rg.name
+  depends_on           = [module.network]
+}
+
+data "azurerm_subnet" "ftd-in" {
+  name                 = "ftd-in-subnet"
+  virtual_network_name = module.network.vnet_name
+  resource_group_name  = azurerm_resource_group.rg.name
+  depends_on           = [module.network]
+}
+
+data "azurerm_subnet" "ftd-out" {
+  name                 = "ftd-out-subnet"
+  virtual_network_name = module.network.vnet_name
+  resource_group_name  = azurerm_resource_group.rg.name
+  depends_on           = [module.network]
+}
+
+data "azurerm_subnet" "wsa-in" {
+  name                 = "wsa-in-subnet"
+  virtual_network_name = module.network.vnet_name
+  resource_group_name  = azurerm_resource_group.rg.name
+  depends_on           = [module.network]
+}
+
+data "azurerm_subnet" "wsa-out" {
+  name                 = "wsa-out-subnet"
+  virtual_network_name = module.network.vnet_name
+  resource_group_name  = azurerm_resource_group.rg.name
+  depends_on           = [module.network]
+}
+
+data "azurerm_subnet" "inspection-in" {
+  name                 = "inspection-in-subnet"
+  virtual_network_name = module.network.vnet_name
+  resource_group_name  = azurerm_resource_group.rg.name
+  depends_on           = [module.network]
+}
+
+data "azurerm_subnet" "inspection-out" {
+  name                 = "inspection-out-subnet"
   virtual_network_name = module.network.vnet_name
   resource_group_name  = azurerm_resource_group.rg.name
   depends_on           = [module.network]
@@ -186,4 +252,9 @@ module "internal-network-security-group" {
     environment = "dev"
     costcenter  = "terraform"
   }
+}
+
+resource "azurerm_subnet_network_security_group_association" "mgmt_nsg_association" {
+  subnet_id = data.azurerm_subnet.mgmt.id
+  network_security_group_id = module.mgmt-network-security-group.network_security_group_id
 }

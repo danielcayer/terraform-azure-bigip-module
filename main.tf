@@ -492,8 +492,10 @@ resource "azurerm_linux_virtual_machine" "f5vm01" {
     identity_ids = var.user_identity == null ? [azurerm_user_assigned_identity.user_identity.id] : [var.user_identity]
   }
   depends_on = [azurerm_network_interface_security_group_association.mgmt_security, azurerm_network_interface_security_group_association.internal_security, azurerm_network_interface_security_group_association.external_security, azurerm_network_interface_security_group_association.external_public_security]
+
 }
 
+/*
 ## ..:: Run Startup Script ::..
 resource "azurerm_virtual_machine_extension" "vmext" {
   name                 = format("%s-vmext1", local.instance_prefix)
@@ -513,6 +515,7 @@ resource "time_sleep" "wait_for_azurerm_virtual_machine_f5vm" {
   depends_on      = [azurerm_virtual_machine_extension.vmext]
   create_duration = var.sleep_time
 }
+*/
 
 # Getting Public IP Assigned to BIGIP
 # data "azurerm_public_ip" "f5vm01mgmtpip" {
