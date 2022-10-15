@@ -95,21 +95,22 @@ extension_services:
         label: Example 8NIC BIG-IP with Runtime-Init
         Common:
           class: Tenant
+          httpdSettings:
+            class: HTTPD
+            authPamIdleTimeout: 12000
           My_DbVariables:
             class: DbVariables
             provision.extramb: 1000
             restjavad.useextramb: true
             ui.advisory.enabled: true
             ui.advisory.color: blue
-            ui.advisory.text: BIG-IP VE Runtime Init Example
+            ui.advisory.text: BIG-IP VE Runtime Init 8NIC SSLO Demo
             dhclient.mgmt: disable
             config.allow.rfc3927: enable
             tm.tcpudptxchecksum: Software-only
           My_System:
             class: System
             hostname: '{{{HOST_NAME}}}.local'
-            cliInactivityTimeout: 12000
-            consoleInactivityTimeout: 12000
             autoPhonehome: true
           My_License:
             class: License
