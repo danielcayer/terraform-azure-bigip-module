@@ -453,7 +453,7 @@ resource "azurerm_linux_virtual_machine" "f5vm01" {
   disable_password_authentication = var.enable_ssh_key
   computer_name                   = "${local.instance_prefix}-f5vm01"
   admin_username                  = var.f5_username
-  admin_password                  = var.az_keyvault_authentication ? data.azurerm_key_vault_secret.bigip_admin_password[0].value : random_string.password.result
+  admin_password                  = var.az_keyvault_authentication ? data.azurerm_key_vault_secret.bigip_admin_password[0].value : var.f5_password
   custom_data                     = base64encode(coalesce(var.custom_user_data, data.template_file.init_file.rendered))
 
   source_image_reference {
@@ -494,35 +494,6 @@ resource "azurerm_linux_virtual_machine" "f5vm01" {
   depends_on = [azurerm_network_interface_security_group_association.mgmt_security, azurerm_network_interface_security_group_association.internal_security, azurerm_network_interface_security_group_association.external_security, azurerm_network_interface_security_group_association.external_public_security]
 
 }
-
-/*
-## ..:: Run Startup Script ::..
-resource "azurerm_virtual_machine_extension" "vmext" {
-  name                 = format("%s-vmext1", local.instance_prefix)
-  depends_on           = [azurerm_linux_virtual_machine.f5vm01]
-  virtual_machine_id   = azurerm_linux_virtual_machine.f5vm01.id
-  publisher            = "Microsoft.Azure.Extensions"
-  type                 = "CustomScript"
-  type_handler_version = "2.0"
-  settings             = <<SETTINGS
-    {
-      "commandToExecute": "bash /var/lib/waagent/CustomData; exit 0;"
-    }
-SETTINGS
-}
-
-resource "time_sleep" "wait_for_azurerm_virtual_machine_f5vm" {
-  depends_on      = [azurerm_virtual_machine_extension.vmext]
-  create_duration = var.sleep_time
-}
-*/
-
-# Getting Public IP Assigned to BIGIP
-# data "azurerm_public_ip" "f5vm01mgmtpip" {
-#   name                = azurerm_public_ip.mgmt_public_ip[0].name
-#   resource_group_name = data.azurerm_resource_group.bigiprg.name
-#   depends_on          = [azurerm_virtual_machine.f5vm01, azurerm_virtual_machine_extension.vmext, azurerm_public_ip.mgmt_public_ip[0]]
-# }
 
 
 data "template_file" "clustermemberDO1" {

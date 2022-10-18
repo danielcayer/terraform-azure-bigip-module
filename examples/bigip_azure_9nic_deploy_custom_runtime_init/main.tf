@@ -42,9 +42,9 @@ data "template_file" "user_data_vm0" {
     az_keyvault_authentication = false
     vault_url                  = ""
     secret_id                  = ""
-    bigip_username             = "bigipuser"
+    bigip_username             = var.f5_username
     ssh_keypair                = fileexists("~/.ssh/id_rsa_azure.pub") ? file("~/.ssh/id_rsa_azure.pub") : ""
-    bigip_password             = "testAzure@123"
+    bigip_password             = var.f5_password
   }
 }
 
@@ -52,20 +52,48 @@ data "template_file" "user_data_vm0" {
 #Create N-nic bigip
 #
 module "bigip" {
-  count                      = var.instance_count
-  source                     = "../../" 
-  prefix                     = format("%s-4nic", var.prefix)
-  resource_group_name        = azurerm_resource_group.rg.name
-  f5_ssh_publickey           = azurerm_ssh_public_key.f5_key.public_key
-  mgmt_subnet_ids            = [{ "subnet_id" = data.azurerm_subnet.mgmt.id, "public_ip" = true, "private_ip_primary" = "" }]
-  mgmt_securitygroup_ids     = [module.mgmt-network-security-group.network_security_group_id]
-  external_subnet_ids        = [{ "subnet_id" = data.azurerm_subnet.external-public.id, "public_ip" = true, "private_ip_primary" = "", "private_ip_secondary" = "" }]
-  external_securitygroup_ids = [module.external-network-security-group-public.network_security_group_id]
-  internal_subnet_ids        = [{ "subnet_id" = data.azurerm_subnet.internal.id, "public_ip" = false, "private_ip_primary" = "" }, { "subnet_id" = data.azurerm_subnet.ftd-in.id, "public_ip" = false, "private_ip_primary" = "" }, { "subnet_id" = data.azurerm_subnet.ftd-out.id, "public_ip" = false, "private_ip_primary" = "" }, { "subnet_id" = data.azurerm_subnet.wsa-in.id, "public_ip" = false, "private_ip_primary" = "" }, { "subnet_id" = data.azurerm_subnet.wsa-out.id, "public_ip" = false, "private_ip_primary" = "" }]
-  internal_securitygroup_ids = [module.internal-network-security-group.network_security_group_id, module.internal-network-security-group.network_security_group_id, module.internal-network-security-group.network_security_group_id, module.internal-network-security-group.network_security_group_id, module.internal-network-security-group.network_security_group_id]
+  count                       = var.instance_count
+  source                      = "../../"
+  prefix                      = format("%s-8nic", var.prefix)
+  resource_group_name         = azurerm_resource_group.rg.name
+  f5_ssh_publickey            = azurerm_ssh_public_key.f5_key.public_key
+  mgmt_subnet_ids             = [{ "subnet_id" = data.azurerm_subnet.mgmt.id, "public_ip" = true, "private_ip_primary" = "" }]
+  mgmt_securitygroup_ids      = [module.mgmt-network-security-group.network_security_group_id]
+  external_subnet_ids         = [{ "subnet_id" = data.azurerm_subnet.external-public.id, "public_ip" = true, "private_ip_primary" = "", "private_ip_secondary" = "" }]
+  external_securitygroup_ids  = [module.external-network-security-group-public.network_security_group_id]
+  internal_subnet_ids         = [{ "subnet_id" = data.azurerm_subnet.internal.id, "public_ip" = false, "private_ip_primary" = "" }, { "subnet_id" = data.azurerm_subnet.ftd-in.id, "public_ip" = false, "private_ip_primary" = "" }, { "subnet_id" = data.azurerm_subnet.ftd-out.id, "public_ip" = false, "private_ip_primary" = "" }, { "subnet_id" = data.azurerm_subnet.wsa-in.id, "public_ip" = false, "private_ip_primary" = "" }, { "subnet_id" = data.azurerm_subnet.wsa-out.id, "public_ip" = false, "private_ip_primary" = "" }, { "subnet_id" = data.azurerm_subnet.inspection-in.id, "public_ip" = false, "private_ip_primary" = "" }]
+  internal_securitygroup_ids  = [module.internal-network-security-group.network_security_group_id, module.internal-network-security-group.network_security_group_id, module.internal-network-security-group.network_security_group_id, module.internal-network-security-group.network_security_group_id, module.internal-network-security-group.network_security_group_id, module.internal-network-security-group.network_security_group_id]
   availability_zone           = var.availability_zone
   availabilityZones_public_ip = var.availabilityZones_public_ip
+  f5_username                 = var.f5_username
+  f5_password                 = var.f5_password
+  f5_instance_type            = var.f5_instance_type
   custom_user_data            = data.template_file.user_data_vm0.rendered
+}
+
+resource "local_file" "revoke_bigip_license_script_file" {
+  #overwrite script file if already exists (touch or create if it doesn't already exist)
+  content  = ""
+  filename = "${path.root}/revoke_bigip_license_script.sh"
+}
+
+resource "null_resource" "bash_script_to_revoke_eval_keys_upon_destroy" {
+  #the resulting script revokes bigip VE license prior to destroy
+  provisioner "local-exec" {
+    command = "echo \"ssh -i ~/.ssh/id_rsa_azure -tt ${var.f5_username}@${module.bigip[0].mgmtPublicIP} 'echo y | tmsh -q revoke sys license 2>/dev/null'\" >> ${path.root}/revoke_bigip_license_script.sh"
+    #command = "echo \"ssh -i ~/.ssh/id_rsa_azure -tt ${var.f5_username}@${module.bigip.azurerm_public_ip.mgmt_public_ip[0].ip_address} 'echo y | tmsh -q revoke sys license 2>/dev/null'\" >> ${path.root}/revoke_bigip_license_script.sh"
+  }
+}
+
+resource "null_resource" "revoke_bigip_licenses" {
+  provisioner "local-exec" {
+    # Recycle/revoke eval keys prior to destroying the bigip (useful for demo purposes)
+    #ssh -i ~/.ssh/id_rsa_azure -tt bigipuser@20.116.0.142 'echo y | tmsh -q revoke sys license 2>/dev/null'
+    command    = "${path.root}/revoke_bigip_license_script.sh"
+    on_failure = continue
+    when       = destroy
+  }
+  depends_on = [module.bigip, azurerm_network_security_rule.mgmt_allow_ssh]
 }
 
 #
@@ -252,9 +280,4 @@ module "internal-network-security-group" {
     environment = "dev"
     costcenter  = "terraform"
   }
-}
-
-resource "azurerm_subnet_network_security_group_association" "mgmt_nsg_association" {
-  subnet_id = data.azurerm_subnet.mgmt.id
-  network_security_group_id = module.mgmt-network-security-group.network_security_group_id
 }

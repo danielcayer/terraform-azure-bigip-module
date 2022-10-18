@@ -1,4 +1,6 @@
-variable f5_instance_type { default = "Standard_DS5_v2"}
+#variable f5_instance_type { default = "Standard_DS5_v2"}
+# "Standard_D4_v2"
+variable "f5_instance_type" { default = "Standard_D13_v2" }
 
 variable "prefix" {
   description = "Prefix for resources created by this module"
@@ -68,8 +70,8 @@ variable "TS_URL" {
 variable "FAST_URL" {
   description = "URL to download the BIG-IP FAST module"
   type        = string
- #default     = "https://github.com/F5Networks/f5-appsvcs-templates/releases/download/v1.18.0/f5-appsvcs-templates-1.18.0-1.noarch.rpm"
-  default     = "https://github.com/F5Networks/f5-appsvcs-templates/releases/download/v1.21.0/f5-appsvcs-templates-1.21.0-1.noarch.rpm"
+  #default     = "https://github.com/F5Networks/f5-appsvcs-templates/releases/download/v1.18.0/f5-appsvcs-templates-1.18.0-1.noarch.rpm"
+  default = "https://github.com/F5Networks/f5-appsvcs-templates/releases/download/v1.21.0/f5-appsvcs-templates-1.21.0-1.noarch.rpm"
 }
 
 ## Please check and update the latest Failover Extension URL from https://github.com/F5Networks/f5-cloud-failover-extension/releases/latest 
@@ -90,5 +92,10 @@ variable "INIT_URL" {
 
 variable "f5_password" {
   description = "The admin password of the F5 Bigip that will be deployed"
-  default     = ""
+  default     = "testAzure@123"
+}
+
+variable "f5_username" {
+  description = "The admin username of the F5 Bigip that will be deployed"
+  default     = "azops"
 }

@@ -5,7 +5,7 @@ variable "prefix" {
 
 variable "f5_username" {
   description = "The admin username of the F5 Bigip that will be deployed"
-  default     = "bigipuser"
+  default     = ""
 }
 variable "f5_password" {
   description = "The admin password of the F5 Bigip that will be deployed"
@@ -69,8 +69,9 @@ variable "internal_securitygroup_ids" {
 variable "f5_instance_type" {
   description = "Specifies the size of the virtual machine."
   type        = string
-##  default     = "Standard_D8s_v4"
-  default     = "Standard_D4_v2"
+  default     = ""
+#  default     = "Standard_D8s_v4"
+#  default     = "Standard_D4_v2"
 #  default     = "Standard_DS5_v2"
 }
 
@@ -284,3 +285,9 @@ variable "sleep_time" {
   default     = "300s"
   description = "The number of seconds/minutes of delay to build into creation of BIG-IP VMs; default is 250. BIG-IP requires a few minutes to complete the onboarding process and this value can be used to delay the processing of dependent Terraform resources."
 }
+
+/*
+variable "dependency_hack" {
+  default = []
+}
+*/
